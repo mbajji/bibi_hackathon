@@ -1,25 +1,26 @@
-import logo from './logo.svg';
-import './App.css';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { AppProvider } from './context/AppContext';
+import Layout from './components/Layout';
+import Dashboard from './pages/Dashboard';
+import ShiftSchedule from './pages/ShiftSchedule';
+import ResolutionPlan from './pages/ResolutionPlan';
+import ActionQueue from './pages/ActionQueue';
+import TelegramMonitor from './pages/TelegramMonitor';
 
-function App() {
+export default function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Editssss <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <BrowserRouter>
+      <AppProvider>
+        <Layout>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/schedule" element={<ShiftSchedule />} />
+            <Route path="/callout/:id" element={<ResolutionPlan />} />
+            <Route path="/actions" element={<ActionQueue />} />
+            <Route path="/telegram" element={<TelegramMonitor />} />
+          </Routes>
+        </Layout>
+      </AppProvider>
+    </BrowserRouter>
   );
 }
-
-export default App;

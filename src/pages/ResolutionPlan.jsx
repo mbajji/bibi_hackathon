@@ -1,0 +1,238 @@
+import { useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { ArrowLeft, CheckCircle, XCircle, Edit3, UserX, Send, AlertTriangle, MessageCircle } from 'lucide-react';
+import { useApp } from '../context/AppContext';
+import { UrgencyBadge, StatusBadge } from '../components/Badges';
+
+export default function ResolutionPlan() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { callOuts, updateCallOutStatus, toggleAction, updateDraftMessage, updateTemporaryPlan } = useApp();
+  const [editMode, setEditMode] = useState(false);
+  const [approveSuccess, setApproveSuccess] = useState(false);
+
+  const callOut = callOuts.find(c => c.id === Number(id));
+  if (!callOut) return (
+    <div className="text-center py-16 text-gray-400">
+      <p>Call-out case not found.</p>
+      <button onClick={() => navigate('/')} className="mt-2 text-orange-500 text-sm">← Back to dashboard</button>
+    </div>
+  );
+
+  const { plan } = callOut;
+
+  function handleApprove() {
+    updateCallOutStatus(callOut.id, 'outreach-sent');
+    setApproveSuccess(true);
+    setTimeout(() => {
+      setApproveSuccess(false);
+      navigate('/');
+    }, 1800);
+  }
+
+  function handleReject() {
+    updateCallOutStatus(callOut.id, 'unresolved');
+    navigate('/');
+  }
+
+  function handleMarkCovered() {
+    updateCallOutStatus(callOut.id, 'covered');
+    navigate('/');
+  }
+
+  const isReadOnly = ['covered', 'unresolved'].includes(callOut.status);
+
+  if (approveSuccess) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-4">
+        <CheckCircle size={52} className="text-green-500" />
+        <p className="text-lg font-semibold text-gray-800">Plan Approved</p>
+        <p className="text-sm text-gray-500">Sending Telegram coverage messages now...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 max-w-4xl">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <button onClick={() => navigate('/')} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700">
+          <ArrowLeft size={15} />
+          Back to Dashboard
+        </button>
+        <div className="flex items-center gap-2">
+          <UrgencyBadge urgency={callOut.urgency} />
+          <StatusBadge status={callOut.status} />
+        </div>
+      </div>
+
+      {/* Call-out summary */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <h2 className="font-semibold text-gray-800 mb-3">Call-Out Summary</h2>
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-700 font-semibold text-sm flex-shrink-0">
+            {callOut.employeeName.split(' ').map(n => n[0]).join('')}
+          </div>
+          <div className="flex-1">
+            <p className="font-medium text-gray-900">{callOut.employeeName} <span className="text-gray-500 font-normal">· {callOut.role}</span></p>
+            <p className="text-sm text-gray-500">
+              {callOut.callOutType} · {callOut.shiftTime} · Detected at {callOut.detectedAt}
+            </p>
+            <div className="mt-2 bg-slate-50 rounded-lg p-3 flex items-start gap-2">
+              <MessageCircle size={13} className="text-blue-400 mt-0.5 flex-shrink-0" />
+              <p className="text-sm text-slate-700 italic">"{callOut.telegramMessage}"</p>
+            </div>
+          </div>
+        </div>
+        <div className="mt-3 bg-orange-50 border border-orange-100 rounded-lg p-3 flex items-start gap-2">
+          <AlertTriangle size={14} className="text-orange-500 mt-0.5 flex-shrink-0" />
+          <p className="text-sm text-orange-800"><span className="font-semibold">Shift Impact:</span> {plan.shiftImpact}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-5">
+        {/* Left column */}
+        <div className="space-y-5">
+          {/* Replacement ranking */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h2 className="font-semibold text-gray-800 mb-3">Replacement Ranking</h2>
+            <div className="space-y-3">
+              {plan.replacements.map((r, i) => (
+                <div key={r.employeeId} className={`rounded-lg border p-3 ${i === 0 ? 'border-green-200 bg-green-50' : 'border-gray-100 bg-gray-50'}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${i === 0 ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-600'}`}>{i + 1}</span>
+                      <span className="font-medium text-sm text-gray-900">{r.name}</span>
+                      <span className="text-xs text-gray-500">{r.role}</span>
+                    </div>
+                    <span className={`text-sm font-bold ${i === 0 ? 'text-green-600' : 'text-gray-500'}`}>{r.score}%</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1.5 ml-7">{r.reason}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Temporary staffing plan */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h2 className="font-semibold text-gray-800 mb-2">Temporary Staffing Plan</h2>
+            {editMode ? (
+              <textarea
+                className="w-full text-sm text-gray-700 border border-gray-200 rounded-lg p-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-orange-300"
+                rows={3}
+                value={plan.temporaryPlan}
+                onChange={e => updateTemporaryPlan(callOut.id, e.target.value)}
+              />
+            ) : (
+              <p className="text-sm text-gray-700">{plan.temporaryPlan}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Right column */}
+        <div className="space-y-5">
+          {/* Draft messages */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold text-gray-800">Draft Coverage Messages</h2>
+              <span className="text-xs text-gray-400">Sent after approval</span>
+            </div>
+            <div className="space-y-3">
+              {plan.draftMessages.map(msg => (
+                <div key={msg.id} className="border border-gray-100 rounded-lg p-3 bg-blue-50">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <Send size={12} className="text-blue-500" />
+                    <span className="text-xs font-medium text-blue-700">
+                      {msg.type === 'DM' ? `DM → ${msg.to}` : `Post → ${msg.to}`}
+                    </span>
+                  </div>
+                  {editMode ? (
+                    <textarea
+                      className="w-full text-sm text-gray-700 border border-blue-200 rounded p-2 resize-none bg-white focus:outline-none focus:ring-1 focus:ring-blue-300"
+                      rows={3}
+                      value={msg.message}
+                      onChange={e => updateDraftMessage(callOut.id, msg.id, e.target.value)}
+                    />
+                  ) : (
+                    <p className="text-sm text-gray-700">"{msg.message}"</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Action queue */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h2 className="font-semibold text-gray-800 mb-3">Action Queue</h2>
+            <div className="space-y-2">
+              {plan.actionQueue.map(action => (
+                <div key={action.id} className={`flex items-start gap-2.5 p-2.5 rounded-lg hover:bg-gray-50 ${action.done ? 'opacity-50' : ''}`}>
+                  <button
+                    onClick={() => toggleAction(callOut.id, action.id)}
+                    className={`mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${action.done ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-green-400'}`}
+                  >
+                    {action.done && (
+                      <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
+                        <path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm ${action.done ? 'line-through text-gray-400' : 'text-gray-800'}`}>{action.action}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{action.owner}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Action bar */}
+      {!isReadOnly && (
+        <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setEditMode(e => !e)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${editMode ? 'bg-orange-50 border-orange-200 text-orange-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+            >
+              <Edit3 size={14} />
+              {editMode ? 'Editing...' : 'Edit Plan'}
+            </button>
+            <button
+              onClick={handleReject}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              <XCircle size={14} />
+              Reject
+            </button>
+            <button
+              onClick={handleMarkCovered}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              <UserX size={14} />
+              Manual Recovery
+            </button>
+          </div>
+
+          <button
+            onClick={handleApprove}
+            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-lg text-sm font-semibold transition-colors"
+          >
+            <CheckCircle size={16} />
+            Approve Plan — Send Messages
+          </button>
+        </div>
+      )}
+
+      {isReadOnly && (
+        <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 text-center text-sm text-gray-500">
+          This case has been <StatusBadge status={callOut.status} /> and is no longer editable.
+          {callOut.status === 'covered' && (
+            <span className="ml-1 text-green-600 font-medium">Shift is covered ✓</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
