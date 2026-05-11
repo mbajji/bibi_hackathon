@@ -9,6 +9,7 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^13.5.0",
     "autoprefixer": "^10.5.0",
+    "concurrently": "^9.2.1",
     "lucide-react": "^1.14.0",
     "mongodb": "^7.2.0",
     "postcss": "^8.5.14",
@@ -16,11 +17,14 @@
     "react-dom": "^19.2.6",
     "react-router-dom": "^7.15.0",
     "react-scripts": "5.0.1",
+    "socket.io-client": "^4.8.3",
     "tailwindcss": "^3.4.19",
     "web-vitals": "^2.1.4"
   },
   "scripts": {
     "start": "react-scripts start",
+    "start:server": "node server/index.js",
+    "dev": "concurrently \"npm run start:server\" \"npm start\"",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "test:e2e": "playwright test",
