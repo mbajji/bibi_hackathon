@@ -1,12 +1,12 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { useAuth } from './AuthContext';
+import { useUser } from '@clerk/clerk-react';
 
 const WorkspaceContext = createContext(null);
 
 const BACKEND_URL = 'http://localhost:3001';
 
 export function WorkspaceProvider({ children }) {
-  const { user } = useAuth();
+  const { user } = useUser();
   const [workspace, setWorkspace] = useState(null);
   const [discordLink, setDiscordLink] = useState(null);
   const [loading, setLoading] = useState(true);

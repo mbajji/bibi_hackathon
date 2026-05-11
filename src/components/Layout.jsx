@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, CalendarDays, MessageSquare, ClipboardList, ChevronRight, LogOut, Link, Unlink } from 'lucide-react';
 import { RESTAURANT_NAME } from '../data/mockData';
 import { useApp } from '../context/AppContext';
-import { useAuth } from '../context/AuthContext';
+import { useUser, useClerk } from '@clerk/clerk-react';
 import { useWorkspace } from '../context/WorkspaceContext';
 
 function formatHeaderDate(d) {
@@ -21,11 +21,13 @@ const NAV = [
 
 export default function Layout({ children }) {
   const { stats } = useApp();
-  const { user, signOut } = useAuth();
+  const { user } = useUser();
+  const { signOut } = useClerk();
   const { discordLink } = useWorkspace();
   const navigate = useNavigate();
   const location = useLocation();
-  const userInitial = (user?.email || 'M').trim().charAt(0).toUpperCase();
+  const userEmail = user?.primaryEmailAddress?.emailAddress || user?.emailAddresses?.[0]?.emailAddress || '';
+  const userInitial = (userEmail || user?.firstName || 'M').trim().charAt(0).toUpperCase();
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 60_000);
@@ -124,13 +126,13 @@ export default function Layout({ children }) {
           </div>
           <div className="flex items-center gap-3">
             <span className="text-sm text-gray-500">{formatHeaderDate(now)}</span>
-            {user?.email && (
-              <span className="text-sm text-gray-600 hidden sm:inline">{user.email}</span>
+            {userEmail && (
+              <span className="text-sm text-gray-600 hidden sm:inline">{userEmail}</span>
             )}
             <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 text-sm font-bold">{userInitial}</div>
             <button
               type="button"
-              onClick={signOut}
+              onClick={() => signOut({ redirectUrl: '/login' })}
               title="Sign out"
               className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900 px-2 py-1 rounded-md hover:bg-gray-100 transition-colors"
             >
