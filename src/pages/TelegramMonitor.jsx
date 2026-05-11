@@ -1,16 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Send, AlertTriangle, Bot, ExternalLink } from 'lucide-react';
+import { Send, AlertTriangle, Bot, ExternalLink, Wifi, WifiOff } from 'lucide-react';
+import { io } from 'socket.io-client';
 import { TELEGRAM_MESSAGES } from '../data/mockData';
 import { useApp } from '../context/AppContext';
 
-const CALL_OUT_KEYWORDS = ['sick', "can't make it", 'cant make it', 'not coming', 'not going to be able', 'emergency', 'late', 'cover my shift', 'swap', 'urgent care', 'hospital', 'fever', 'throwing up', 'cant come', "can't come", 'unable to make', 'not able to come'];
-
-function detectCallOut(text) {
-  const lower = text.toLowerCase();
-  const matched = CALL_OUT_KEYWORDS.filter(k => lower.includes(k));
-  return { isCallOut: matched.length > 0, keywords: matched };
-}
+const BACKEND_URL = 'http://localhost:3001';
 
 export default function TelegramMonitor() {
   const { callOuts } = useApp();
@@ -19,55 +14,77 @@ export default function TelegramMonitor() {
   const [input, setInput] = useState('');
   const [senderName, setSenderName] = useState('Staff Member');
   const [lastDetection, setLastDetection] = useState(null);
+  const [connected, setConnected] = useState(false);
   const bottomRef = useRef(null);
+  const socketRef = useRef(null);
+
+  // Connect to backend socket for live messages
+  useEffect(() => {
+    const socket = io(BACKEND_URL, { transports: ['websocket', 'polling'] });
+    socketRef.current = socket;
+
+    socket.on('connect', () => setConnected(true));
+    socket.on('disconnect', () => setConnected(false));
+
+    // Load existing backend message history on connect
+    fetch(`${BACKEND_URL}/messages`)
+      .then(r => r.json())
+      .then(backendMsgs => {
+        if (backendMsgs.length > 0) {
+          setMessages(prev => [...prev, ...backendMsgs]);
+        }
+      })
+      .catch(() => {});
+
+    socket.on('new_message', (msg) => {
+      setMessages(prev => {
+        // Avoid duplicate IDs
+        if (prev.some(m => m.id === msg.id)) return prev;
+        return [...prev, msg];
+      });
+      if (msg.isBot && msg.text.includes('Call-out detected')) {
+        const senderMatch = msg.text.match(/from (.+?)\./);
+        const sender = senderMatch ? senderMatch[1] : 'someone';
+        const kwMatch = msg.text.match(/Keywords: "(.+?)"/);
+        const keywords = kwMatch ? kwMatch[1].split('", "') : [];
+        setLastDetection({ sender, keywords });
+      }
+    });
+
+    return () => socket.disconnect();
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  function handleSend() {
+  async function handleSend() {
     const text = input.trim();
     if (!text) return;
-
-    const now = new Date();
-    const time = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-    const initials = senderName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-
-    const userMsg = {
-      id: Date.now(),
-      sender: senderName,
-      username: `@${senderName.toLowerCase().replace(/\s/g, '')}`,
-      initials,
-      time,
-      text,
-      isCallOut: false,
-      isBot: false,
-      isSimulated: true,
-    };
-
-    const { isCallOut, keywords } = detectCallOut(text);
-
-    if (isCallOut) {
-      userMsg.isCallOut = true;
-      const botMsg = {
-        id: Date.now() + 1,
-        sender: 'ShiftSaver Bot',
-        username: '@shiftsaverbot',
-        initials: '🤖',
-        time,
-        text: `🚨 Possible call-out detected from ${senderName}. Keywords: "${keywords.join('", "')}" — Creating draft case for manager review...`,
-        isCallOut: false,
-        isBot: true,
-        isSimulated: true,
-      };
-      setMessages(prev => [...prev, userMsg, botMsg]);
-      setLastDetection({ sender: senderName, keywords, text });
-    } else {
-      setMessages(prev => [...prev, userMsg]);
-      setLastDetection(null);
-    }
-
     setInput('');
+
+    try {
+      await fetch(`${BACKEND_URL}/mock-message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sender: senderName, text }),
+      });
+      // Message will come back via socket
+    } catch {
+      // Backend not running — fall back to local-only simulation
+      const now = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+      const initials = senderName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+      setMessages(prev => [...prev, {
+        id: Date.now(),
+        sender: senderName,
+        username: `@${senderName.toLowerCase().replace(/\s/g, '')}`,
+        initials,
+        time: now,
+        text,
+        isCallOut: false,
+        isBot: false,
+      }]);
+    }
   }
 
   function handleKeyDown(e) {
@@ -84,9 +101,11 @@ export default function TelegramMonitor() {
           <h1 className="text-xl font-bold text-gray-900">Telegram Monitor</h1>
           <p className="text-sm text-gray-500 mt-0.5">Staff group chat · Bot detects call-outs automatically</p>
         </div>
-        <div className="flex items-center gap-1.5 bg-green-50 border border-green-200 text-green-700 rounded-lg px-3 py-1.5 text-sm font-medium">
-          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-          Bot Active
+        <div className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium border ${connected ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-50 border-gray-200 text-gray-500'}`}>
+          {connected
+            ? <><span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" /> Bot Active</>
+            : <><WifiOff size={13} /> Mock Mode</>
+          }
         </div>
       </div>
 
@@ -95,11 +114,16 @@ export default function TelegramMonitor() {
         <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 flex items-start gap-3">
           <AlertTriangle size={18} className="text-orange-500 mt-0.5 flex-shrink-0" />
           <div>
-            <p className="text-sm font-semibold text-orange-800">Call-out detected in your simulation!</p>
+            <p className="text-sm font-semibold text-orange-800">Call-out detected — new case created on dashboard</p>
             <p className="text-sm text-orange-700 mt-0.5">
-              Keywords found: <span className="font-mono bg-orange-100 px-1 rounded">{lastDetection.keywords.join(', ')}</span>
+              Keywords: <span className="font-mono bg-orange-100 px-1 rounded">{lastDetection.keywords.join(', ')}</span>
             </p>
-            <p className="text-xs text-orange-600 mt-1">In a live setup, this would create a draft recovery case for manager review.</p>
+            <button
+              onClick={() => navigate('/')}
+              className="mt-1.5 text-xs text-orange-600 font-medium underline hover:text-orange-700"
+            >
+              View on dashboard →
+            </button>
           </div>
         </div>
       )}
@@ -109,16 +133,20 @@ export default function TelegramMonitor() {
         {/* Chat header */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 bg-blue-500">
           <div className="w-8 h-8 rounded-full bg-blue-400 flex items-center justify-center text-white text-sm font-bold">GF</div>
-          <div>
+          <div className="flex-1">
             <p className="text-white font-semibold text-sm">The Golden Fork — Staff 🍴</p>
             <p className="text-blue-100 text-xs">12 members · ShiftSaver Bot active</p>
           </div>
+          {connected
+            ? <Wifi size={14} className="text-blue-200" />
+            : <WifiOff size={14} className="text-blue-300" />
+          }
         </div>
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
           {messages.map(msg => (
-            <ChatMessage key={msg.id} msg={msg} callOuts={callOuts} navigate={navigate} />
+            <ChatMessage key={msg.id} msg={msg} callOuts={callOuts} navigate={navigate} currentSender={senderName} />
           ))}
           <div ref={bottomRef} />
         </div>
@@ -134,7 +162,7 @@ export default function TelegramMonitor() {
               className="text-xs border border-gray-200 rounded px-2 py-1 w-36 focus:outline-none focus:ring-1 focus:ring-blue-300"
               placeholder="Your name"
             />
-            <span className="text-xs text-gray-400">(try: "I'm sick, can't make my shift")</span>
+            <span className="text-xs text-gray-400">try: "I'm sick, can't make my shift"</span>
           </div>
           <div className="flex items-center gap-2">
             <input
@@ -161,10 +189,8 @@ export default function TelegramMonitor() {
         <div>
           <p className="text-sm font-semibold text-slate-700">How the Bot Works</p>
           <p className="text-sm text-slate-500 mt-0.5">
-            ShiftSaver Bot reads every message in the staff group. When it detects call-out language (sickness, emergencies, lateness, coverage requests), it creates a draft recovery case on the manager dashboard — but doesn't contact anyone until the manager approves.
-          </p>
-          <p className="text-xs text-slate-400 mt-1">
-            Detection keywords: {CALL_OUT_KEYWORDS.slice(0, 6).join(', ')}, and more...
+            ShiftSaver Bot reads every message in the staff group. When it detects call-out language it automatically creates a recovery case on the manager dashboard — but contacts nobody until the manager approves.
+            {!connected && <span className="text-orange-600"> Start the backend server to connect to a real Telegram group.</span>}
           </p>
         </div>
       </div>
@@ -172,7 +198,9 @@ export default function TelegramMonitor() {
   );
 }
 
-function ChatMessage({ msg, callOuts, navigate }) {
+function ChatMessage({ msg, callOuts, navigate, currentSender }) {
+  const isMe = msg.sender === currentSender && !msg.isBot;
+
   if (msg.isBot) {
     return (
       <div className="flex justify-center">
@@ -197,21 +225,21 @@ function ChatMessage({ msg, callOuts, navigate }) {
   }
 
   return (
-    <div className={`flex items-end gap-2 ${msg.isSimulated ? 'flex-row-reverse' : ''}`}>
+    <div className={`flex items-end gap-2 ${isMe ? 'flex-row-reverse' : ''}`}>
       <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${msg.isCallOut ? 'bg-red-200 text-red-700' : 'bg-slate-200 text-slate-700'}`}>
         {typeof msg.initials === 'string' && msg.initials.length <= 2 ? msg.initials : '👤'}
       </div>
-      <div className={`max-w-xs ${msg.isSimulated ? 'items-end' : ''}`}>
-        <p className={`text-xs text-gray-400 mb-0.5 ${msg.isSimulated ? 'text-right' : ''}`}>
+      <div className={`max-w-xs ${isMe ? 'items-end' : ''}`}>
+        <p className={`text-xs text-gray-400 mb-0.5 ${isMe ? 'text-right' : ''}`}>
           {msg.sender} · {msg.time}
         </p>
         <div className={`rounded-2xl px-3 py-2 ${msg.isCallOut
           ? 'bg-red-100 border border-red-200'
-          : msg.isSimulated
+          : isMe
           ? 'bg-blue-500 text-white'
           : 'bg-white border border-gray-200'
         }`}>
-          <p className={`text-sm ${msg.isSimulated ? 'text-white' : 'text-gray-800'}`}>{msg.text}</p>
+          <p className={`text-sm ${isMe ? 'text-white' : 'text-gray-800'}`}>{msg.text}</p>
           {msg.isCallOut && (
             <div className="mt-1.5 flex items-center gap-1">
               <AlertTriangle size={11} className="text-red-500" />
