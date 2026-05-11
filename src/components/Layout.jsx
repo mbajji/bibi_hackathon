@@ -14,7 +14,7 @@ function formatHeaderDate(d) {
 const NAV = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/schedule', icon: CalendarDays, label: 'Staff Schedule' },
-  { to: '/telegram', icon: MessageSquare, label: 'Telegram Monitor' },
+  { to: '/discord', icon: MessageSquare, label: 'Discord Monitor' },
   { to: '/actions', icon: ClipboardList, label: 'Action Queue' },
 ];
 
@@ -32,7 +32,7 @@ export default function Layout({ children }) {
   const pageTitle = () => {
     if (location.pathname === '/') return 'Call-Out Dashboard';
     if (location.pathname === '/schedule') return 'Staff Schedule';
-    if (location.pathname === '/telegram') return 'Telegram Monitor';
+    if (location.pathname === '/discord') return 'Discord Monitor';
     if (location.pathname === '/actions') return 'Action Queue';
     if (location.pathname.startsWith('/callout/')) return 'Recovery Plan';
     return 'ShiftSaver AI';

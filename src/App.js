@@ -6,7 +6,7 @@ import Dashboard from './pages/Dashboard';
 import ShiftSchedule from './pages/ShiftSchedule';
 import ResolutionPlan from './pages/ResolutionPlan';
 import ActionQueue from './pages/ActionQueue';
-import TelegramMonitor from './pages/TelegramMonitor';
+import DiscordMonitor from './pages/DiscordMonitor';
 import Login from './pages/Login';
 
 function RequireAuth({ children }) {
@@ -43,7 +43,7 @@ export default function App() {
                       <Route path="/schedule" element={<ShiftSchedule />} />
                       <Route path="/callout/:id" element={<ResolutionPlan />} />
                       <Route path="/actions" element={<ActionQueue />} />
-                      <Route path="/telegram" element={<TelegramMonitor />} />
+                      <Route path="/discord" element={<DiscordMonitor />} />
                     </Routes>
                   </Layout>
                 </AppProvider>

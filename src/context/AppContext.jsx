@@ -101,7 +101,7 @@ export function AppProvider({ children }) {
     socket.on('call_out_detected', ({ sender, username, text, keywords, time }) => {
       const employee = EMPLOYEES.find(e =>
         e.name.toLowerCase() === sender.toLowerCase() ||
-        e.telegram.toLowerCase() === username.toLowerCase()
+        e.discord?.toLowerCase() === username.toLowerCase()
       ) || null;
 
       const newCase = {
@@ -117,7 +117,7 @@ export function AppProvider({ children }) {
         callOutType: keywords.some(k => ['sick', 'fever', 'hospital', 'urgent care', 'throwing up'].includes(k)) ? 'Illness' : 'Emergency',
         reason: text.slice(0, 80),
         urgency: 'High',
-        urgencyReason: 'Live call-out detected via Telegram',
+        urgencyReason: 'Live call-out detected via Discord',
         confidence: 85,
         status: 'pending-approval',
         outreachTarget: null,
@@ -252,6 +252,17 @@ export function AppProvider({ children }) {
     }));
   }
 
+  async function sendApprovedMessages(callOutId) {
+    const callOut = callOuts.find(c => c.id === callOutId);
+    if (!callOut) return;
+    await fetch(`${BACKEND_URL}/send-messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: callOut.plan.draftMessages }),
+    }).catch(() => {});
+    updateCallOutStatus(callOutId, 'outreach-sent');
+  }
+
   const stats = {
     active: callOuts.filter(c => !['covered', 'unresolved'].includes(c.status)).length,
     covered: callOuts.filter(c => c.status === 'covered').length,
@@ -264,7 +275,7 @@ export function AppProvider({ children }) {
       callOuts, stats, extraTasks, socket: socketRef.current,
       shiftsByDay, hasRemoteShifts, shiftsLoading, shiftsError,
       refreshShifts, uploadShiftsCsv,
-      updateCallOutStatus, toggleAction, toggleExtraTask, addExtraTask, removeExtraTask,
+      updateCallOutStatus, sendApprovedMessages, toggleAction, toggleExtraTask, addExtraTask, removeExtraTask,
       updateDraftMessage, updateTemporaryPlan,
     }}>
       {children}

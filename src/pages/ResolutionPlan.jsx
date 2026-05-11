@@ -7,7 +7,7 @@ import { UrgencyBadge, StatusBadge } from '../components/Badges';
 export default function ResolutionPlan() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { callOuts, updateCallOutStatus, toggleAction, updateDraftMessage, updateTemporaryPlan } = useApp();
+  const { callOuts, updateCallOutStatus, sendApprovedMessages, toggleAction, updateDraftMessage, updateTemporaryPlan } = useApp();
   const [editMode, setEditMode] = useState(false);
   const [approveSuccess, setApproveSuccess] = useState(false);
 
@@ -22,7 +22,7 @@ export default function ResolutionPlan() {
   const { plan } = callOut;
 
   function handleApprove() {
-    updateCallOutStatus(callOut.id, 'outreach-sent');
+    sendApprovedMessages(callOut.id);
     setApproveSuccess(true);
     setTimeout(() => {
       setApproveSuccess(false);

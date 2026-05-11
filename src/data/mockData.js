@@ -1,16 +1,16 @@
 export const RESTAURANT_NAME = 'The Golden Fork';
 
 export const EMPLOYEES = [
-  { id: 1, name: 'Maria Santos', role: 'Server', telegram: '@mariasantos', hoursThisWeek: 24, phone: '555-0101', initials: 'MS' },
-  { id: 2, name: 'Jake Thompson', role: 'Line Cook', telegram: '@jakethompson', hoursThisWeek: 32, phone: '555-0102', initials: 'JT' },
-  { id: 3, name: 'Priya Patel', role: 'Server', telegram: '@priyapatel', hoursThisWeek: 16, phone: '555-0103', initials: 'PP' },
-  { id: 4, name: 'Carlos Rivera', role: 'Bartender', telegram: '@carlosrivera', hoursThisWeek: 28, phone: '555-0104', initials: 'CR' },
-  { id: 5, name: 'Emma Wilson', role: 'Host', telegram: '@emmawilson', hoursThisWeek: 20, phone: '555-0105', initials: 'EW' },
-  { id: 6, name: 'Darius Okafor', role: 'Line Cook', telegram: '@dariusokafor', hoursThisWeek: 40, phone: '555-0106', initials: 'DO' },
-  { id: 7, name: 'Sophie Chen', role: 'Server', telegram: '@sophiechen', hoursThisWeek: 12, phone: '555-0107', initials: 'SC' },
-  { id: 8, name: 'Marcus Bell', role: 'Server', telegram: '@marcusbell', hoursThisWeek: 28, phone: '555-0108', initials: 'MB' },
-  { id: 9, name: 'Tina Kowalski', role: 'Sous Chef', telegram: '@tinakowalski', hoursThisWeek: 36, phone: '555-0109', initials: 'TK' },
-  { id: 10, name: 'Luis Mendez', role: 'Busser', telegram: '@luismendez', hoursThisWeek: 18, phone: '555-0110', initials: 'LM' },
+  { id: 1, name: 'Maria Santos', role: 'Server', telegram: '@mariasantos', discord: 'mariasantos', hoursThisWeek: 24, phone: '555-0101', initials: 'MS' },
+  { id: 2, name: 'Jake Thompson', role: 'Line Cook', telegram: '@jakethompson', discord: 'jakethompson', hoursThisWeek: 32, phone: '555-0102', initials: 'JT' },
+  { id: 3, name: 'Priya Patel', role: 'Server', telegram: '@priyapatel', discord: 'priyapatel', hoursThisWeek: 16, phone: '555-0103', initials: 'PP' },
+  { id: 4, name: 'Carlos Rivera', role: 'Bartender', telegram: '@carlosrivera', discord: 'carlosrivera', hoursThisWeek: 28, phone: '555-0104', initials: 'CR' },
+  { id: 5, name: 'Emma Wilson', role: 'Host', telegram: '@emmawilson', discord: 'emmawilson', hoursThisWeek: 20, phone: '555-0105', initials: 'EW' },
+  { id: 6, name: 'Darius Okafor', role: 'Line Cook', telegram: '@dariusokafor', discord: 'dariusokafor', hoursThisWeek: 40, phone: '555-0106', initials: 'DO' },
+  { id: 7, name: 'Sophie Chen', role: 'Server', telegram: '@sophiechen', discord: 'sophiechen', hoursThisWeek: 12, phone: '555-0107', initials: 'SC' },
+  { id: 8, name: 'Marcus Bell', role: 'Server', telegram: '@marcusbell', discord: 'marcusbell', hoursThisWeek: 28, phone: '555-0108', initials: 'MB' },
+  { id: 9, name: 'Tina Kowalski', role: 'Sous Chef', telegram: '@tinakowalski', discord: 'tinakowalski', hoursThisWeek: 36, phone: '555-0109', initials: 'TK' },
+  { id: 10, name: 'Luis Mendez', role: 'Busser', telegram: '@luismendez', discord: 'luismendez', hoursThisWeek: 18, phone: '555-0110', initials: 'LM' },
 ];
 
 // 24h time format ("HH:MM") for timeline calculations
@@ -181,6 +181,18 @@ export const INITIAL_CALL_OUTS = [
       ],
     },
   },
+];
+
+export const DISCORD_MESSAGES = [
+  { id: 101, sender: 'Emma Wilson', username: 'emmawilson', initials: 'EW', time: '7:02 AM', text: 'Good morning everyone! Ready for a busy Saturday 💪', isCallOut: false, isBot: false },
+  { id: 102, sender: 'Tina Kowalski', username: 'tinakowalski', initials: 'TK', time: '7:14 AM', text: 'Morning! Just prepping some stock. See you all soon', isCallOut: false, isBot: false },
+  { id: 103, sender: 'Jake Thompson', username: 'jakethompson', initials: 'JT', time: '7:45 AM', text: 'not going to be able to make it in today guys. family emergency came up last night. really sorry', isCallOut: true, callOutId: 2, isBot: false },
+  { id: 104, sender: 'ShiftSaver', username: 'shiftsaver', initials: '⚡', time: '7:45 AM', text: '🚨 Call-out detected from Jake Thompson. Keywords: "not going to be able" — Creating recovery case for manager review...', isCallOut: false, isBot: true },
+  { id: 105, sender: 'Tina Kowalski', username: 'tinakowalski', initials: 'TK', time: '7:47 AM', text: 'oh no jake, hope everything is okay! take care of yourself 🙏', isCallOut: false, isBot: false },
+  { id: 106, sender: 'Carlos Rivera', username: 'carlosrivera', initials: 'CR', time: '8:10 AM', text: 'running ~5 min late, parking situation is rough today', isCallOut: false, isBot: false },
+  { id: 107, sender: 'Maria Santos', username: 'mariasantos', initials: 'MS', time: '9:23 AM', text: 'hey guys im so sorry but im super sick today 🤒 cant make my lunch shift, going to urgent care rn. so sorry for the short notice!!', isCallOut: true, callOutId: 1, isBot: false },
+  { id: 108, sender: 'ShiftSaver', username: 'shiftsaver', initials: '⚡', time: '9:23 AM', text: '🚨 Call-out detected from Maria Santos. Keywords: "sick", "urgent care" — Creating recovery case for manager review...', isCallOut: false, isBot: true },
+  { id: 109, sender: 'Emma Wilson', username: 'emmawilson', initials: 'EW', time: '9:25 AM', text: 'oh no maria!! feel better soon 💛', isCallOut: false, isBot: false },
 ];
 
 export const TELEGRAM_MESSAGES = [
