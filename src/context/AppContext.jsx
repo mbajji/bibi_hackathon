@@ -1,11 +1,6 @@
-<<<<<<< Updated upstream
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { INITIAL_CALL_OUTS, WEEKLY_SHIFTS } from '../data/mockData';
-=======
-import { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 import { INITIAL_CALL_OUTS, EMPLOYEES, WEEKLY_SHIFTS } from '../data/mockData';
->>>>>>> Stashed changes
 
 const AppContext = createContext(null);
 
@@ -238,13 +233,9 @@ export function AppProvider({ children }) {
 
   return (
     <AppContext.Provider value={{
-<<<<<<< Updated upstream
-      callOuts, stats, extraTasks,
+      callOuts, stats, extraTasks, socket: socketRef.current,
       shiftsByDay, hasRemoteShifts, shiftsLoading, shiftsError,
       refreshShifts, uploadShiftsCsv,
-=======
-      callOuts, stats, extraTasks, socket: socketRef.current,
->>>>>>> Stashed changes
       updateCallOutStatus, toggleAction, toggleExtraTask, addExtraTask, removeExtraTask,
       updateDraftMessage, updateTemporaryPlan,
     }}>
