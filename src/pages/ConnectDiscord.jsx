@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { CheckCircle, Hash, Link, Plus, Server, Unlink, AlertTriangle, ChevronLeft, ExternalLink } from 'lucide-react';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { useAuth } from '../context/AuthContext';
 
-const BACKEND_URL = 'http://localhost:3001';
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 
 export default function ConnectDiscord() {
-  const { workspace, discordLink, linkDiscord, unlinkDiscord, refreshLink } = useWorkspace();
+  const { workspace, discordLink, linkDiscord, unlinkDiscord } = useWorkspace();
+  const { session } = useAuth();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
@@ -48,7 +50,9 @@ export default function ConnectDiscord() {
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/discord/oauth/url?workspaceId=${workspace.id}`);
+      const res = await fetch(`${BACKEND_URL}/api/discord/oauth/url?workspaceId=${workspace.id}`, {
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+      });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       window.location.href = data.url;

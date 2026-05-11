@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, XCircle, Edit3, UserX, Send, AlertTriangle, MessageCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Edit3, UserX, Send, AlertTriangle, MessageCircle, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { UrgencyBadge, StatusBadge } from '../components/Badges';
@@ -12,6 +12,7 @@ export default function ResolutionPlan() {
   const { workspace } = useWorkspace();
   const [editMode, setEditMode] = useState(false);
   const [approveSuccess, setApproveSuccess] = useState(false);
+  const [selectedReplId, setSelectedReplId] = useState(null);
 
   const callOut = callOuts.find(c => c.id === Number(id));
   if (!callOut) return (
@@ -22,9 +23,23 @@ export default function ResolutionPlan() {
   );
 
   const { plan } = callOut;
+  const activeDmMsgId = plan.draftMessages.find(m => m.type === 'DM')?.id;
+  const effectiveReplId = selectedReplId ?? plan.replacements[0]?.employeeId;
+
+  function handleSelectReplacement(r) {
+    setSelectedReplId(r.employeeId);
+    if (activeDmMsgId == null) return;
+    const firstName = r.name.split(' ')[0];
+    const callerFirst = callOut.employeeName.split(' ')[0];
+    updateDraftMessage(
+      callOut.id,
+      activeDmMsgId,
+      `Hey ${firstName}! ${callerFirst} just called out. Any chance you can cover their shift today? Let me know ASAP 🙏`
+    );
+  }
 
   function handleApprove() {
-    sendApprovedMessages(callOut.id, workspace?.id);
+    sendApprovedMessages(callOut.id, workspace?.id, effectiveReplId);
     setApproveSuccess(true);
     setTimeout(() => {
       setApproveSuccess(false);
@@ -96,6 +111,27 @@ export default function ResolutionPlan() {
         )}
       </div>
 
+      {/* Coverage response banners */}
+      {callOut.status === 'covered' && callOut.coveredBy && (
+        <div className="flex items-center gap-2.5 bg-green-50 border border-green-200 rounded-xl p-4">
+          <ThumbsUp size={16} className="text-green-600 flex-shrink-0" />
+          <p className="text-sm font-medium text-green-800">
+            <span className="font-semibold">{callOut.coveredBy}</span> confirmed they can cover the shift!
+          </p>
+        </div>
+      )}
+      {callOut.coverageDeclined && callOut.status !== 'covered' && (
+        <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <ThumbsDown size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-amber-800">
+              <span className="font-semibold">{callOut.declinedBy}</span> can't cover. Contact the next candidate.
+            </p>
+            <p className="text-xs text-amber-600 mt-0.5">Select another replacement below and re-approve.</p>
+          </div>
+        </div>
+      )}
+
       {/* Draft coverage messages */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
         <div className="flex items-center justify-between mb-3">
@@ -129,20 +165,34 @@ export default function ResolutionPlan() {
       {/* Replacement ranking */}
       {plan.replacements.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h2 className="font-semibold text-gray-800 mb-3">Replacement Options</h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-semibold text-gray-800">Replacement Options</h2>
+            <span className="text-xs text-gray-400">Click to select who to contact</span>
+          </div>
           <div className="space-y-2">
-            {plan.replacements.slice(0, 3).map((r, i) => (
-              <div key={r.employeeId} className={`flex items-center gap-3 rounded-lg border p-3 ${i === 0 ? 'border-green-200 bg-green-50' : 'border-gray-100 bg-gray-50'}`}>
-                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${i === 0 ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-600'}`}>
-                  {i + 1}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900">{r.name} <span className="text-gray-500 font-normal text-xs">· {r.role}</span></p>
-                  <p className="text-xs text-gray-500 truncate">{r.reason}</p>
-                </div>
-                <span className={`text-sm font-bold flex-shrink-0 ${i === 0 ? 'text-green-600' : 'text-gray-400'}`}>{r.score}%</span>
-              </div>
-            ))}
+            {plan.replacements.slice(0, 3).map((r, i) => {
+              const isSelected = r.employeeId === effectiveReplId;
+              return (
+                <button
+                  key={r.employeeId}
+                  onClick={() => !isReadOnly && handleSelectReplacement(r)}
+                  className={`w-full flex items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
+                    isSelected
+                      ? 'border-green-400 bg-green-50 ring-1 ring-green-300'
+                      : 'border-gray-100 bg-gray-50 hover:border-gray-200 hover:bg-gray-100'
+                  } ${isReadOnly ? 'cursor-default' : 'cursor-pointer'}`}
+                >
+                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${isSelected ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-600'}`}>
+                    {isSelected ? '✓' : i + 1}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900">{r.name} <span className="text-gray-500 font-normal text-xs">· {r.role}</span></p>
+                    <p className="text-xs text-gray-500 truncate">{r.reason}</p>
+                  </div>
+                  <span className={`text-sm font-bold flex-shrink-0 ${isSelected ? 'text-green-600' : 'text-gray-400'}`}>{r.score}%</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}

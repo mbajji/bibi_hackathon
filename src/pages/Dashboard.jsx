@@ -73,7 +73,7 @@ export default function Dashboard() {
         <div className="text-center py-20">
           <CheckCircle size={44} className="mx-auto mb-3 text-green-300" />
           <p className="font-semibold text-gray-600">All shifts covered</p>
-          <p className="text-sm text-gray-400 mt-1">No call-outs detected from Telegram</p>
+          <p className="text-sm text-gray-400 mt-1">No call-outs detected</p>
         </div>
       )}
     </div>

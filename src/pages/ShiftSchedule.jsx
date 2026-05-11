@@ -1,7 +1,8 @@
 import { useState, useMemo, useRef } from 'react';
-import { ChevronLeft, ChevronRight, AlertTriangle, Upload, Loader2, CheckCircle2 } from 'lucide-react';
-import { WEEK_DAYS, WEEK_DATES, TODAY_DAY_INDEX, CURRENT_YEAR, TODAY_DAY_KEY } from '../data/mockData';
+import { ChevronLeft, ChevronRight, AlertTriangle, Upload, Loader2, CheckCircle2, RefreshCw, Users } from 'lucide-react';
+import { WEEK_DAYS, WEEK_DATES, TODAY_DAY_INDEX, CURRENT_YEAR, TODAY_DAY_KEY, EMPLOYEES } from '../data/mockData';
 import { useApp } from '../context/AppContext';
+import { useWorkspace } from '../context/WorkspaceContext';
 import { useNavigate } from 'react-router-dom';
 
 const TIMELINE_START = 9;   // 9 AM
@@ -33,7 +34,8 @@ const HOUR_MARKS = Array.from({ length: TOTAL_HOURS + 1 }, (_, i) => TIMELINE_ST
 export default function StaffSchedule() {
   const [view, setView] = useState('day');
   const [selectedDay, setSelectedDay] = useState(TODAY_DAY_INDEX);
-  const { callOuts, shiftsByDay, hasRemoteShifts, shiftsLoading } = useApp();
+  const { callOuts, shiftsByDay, hasRemoteShifts, shiftsLoading, discordStaff, syncDiscordMembers } = useApp();
+  const { discordLink } = useWorkspace();
   const navigate = useNavigate();
 
   // For today, apply live call-out statuses from AppContext
@@ -137,6 +139,12 @@ export default function StaffSchedule() {
         ? <DayTimeline shifts={shifts} navigate={navigate} />
         : <WeekView selectedDay={selectedDay} onSelectDay={i => { setSelectedDay(i); setView('day'); }} callOuts={callOuts} shiftsByDay={shiftsByDay} />
       }
+
+      <StaffList
+        discordStaff={discordStaff}
+        guildId={discordLink?.guild_id}
+        onSync={syncDiscordMembers}
+      />
     </div>
   );
 }
@@ -307,6 +315,128 @@ function DayTimeline({ shifts, navigate }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function StaffList({ discordStaff, guildId, onSync }) {
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState(null);
+  const [synced, setSynced] = useState(false);
+
+  async function handleSync() {
+    if (!guildId) return;
+    setSyncing(true);
+    setSyncError(null);
+    const result = await onSync(guildId);
+    setSyncing(false);
+    if (result?.error) {
+      setSyncError(result);
+    } else {
+      setSynced(true);
+      setTimeout(() => setSynced(false), 3000);
+    }
+  }
+
+  const showDiscord = discordStaff.length > 0;
+  const members = showDiscord ? discordStaff : EMPLOYEES;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Users size={16} className="text-gray-500" />
+          <h2 className="font-semibold text-gray-800">Staff List</h2>
+          <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">{members.length}</span>
+          {showDiscord && (
+            <span className="text-xs text-indigo-600 bg-indigo-50 rounded-full px-2 py-0.5">from Discord</span>
+          )}
+        </div>
+        {guildId && (
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+          >
+            {syncing
+              ? <Loader2 size={13} className="animate-spin" />
+              : synced
+                ? <CheckCircle2 size={13} className="text-green-500" />
+                : <RefreshCw size={13} />}
+            {syncing ? 'Syncing…' : synced ? 'Synced!' : 'Sync from Discord'}
+          </button>
+        )}
+      </div>
+
+      {syncError && (
+        <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
+          <p className="font-medium text-amber-800">
+            {syncError.error === 'Server Members Intent not enabled'
+              ? 'Server Members Intent not enabled'
+              : 'Sync failed'}
+          </p>
+          {syncError.hint
+            ? <p className="text-amber-700 mt-0.5">{syncError.hint}</p>
+            : <p className="text-amber-700 mt-0.5">{syncError.error}</p>}
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+        {members.map(member => {
+          const isDiscord = showDiscord;
+          const name = isDiscord ? member.displayName : member.name;
+          const sub = isDiscord
+            ? (member.roles[0] || `@${member.username}`)
+            : member.role;
+          const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+          const colors = ROLE_COLORS[member.role] || ROLE_COLORS.Busser;
+          const isManager = isDiscord ? member.isManager : false;
+
+          return (
+            <div
+              key={member.id || member.username}
+              className={`flex items-center gap-2.5 p-2.5 rounded-lg border transition-colors ${
+                isManager
+                  ? 'border-orange-200 bg-orange-50'
+                  : 'border-gray-100 bg-gray-50 hover:bg-gray-100'
+              }`}
+            >
+              {isDiscord && member.avatar
+                ? (
+                  <div className="relative flex-shrink-0">
+                    <img src={member.avatar} alt={name} className="w-8 h-8 rounded-full" />
+                    {isManager && (
+                      <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-orange-500 flex items-center justify-center text-white text-xs font-bold leading-none">M</span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="relative flex-shrink-0">
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
+                      style={{ backgroundColor: isManager ? '#fed7aa' : (colors?.light || '#f1f5f9'), color: isManager ? '#9a3412' : (colors?.text || '#475569') }}
+                    >
+                      {initials}
+                    </div>
+                    {isManager && (
+                      <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-orange-500 flex items-center justify-center text-white text-xs font-bold leading-none">M</span>
+                    )}
+                  </div>
+                )
+              }
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-800 truncate">{name}</p>
+                <p className={`text-xs truncate ${isManager ? 'text-orange-600 font-medium' : 'text-gray-400'}`}>{sub}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {!guildId && !showDiscord && (
+        <p className="text-xs text-gray-400 mt-3 text-center">
+          Connect Discord to sync your actual server members
+        </p>
+      )}
     </div>
   );
 }

@@ -1,12 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 import { INITIAL_CALL_OUTS, EMPLOYEES, WEEKLY_SHIFTS } from '../data/mockData';
-import { supabase, supabaseConfigured } from '../lib/supabase';
+import { dbToUiCallOut, fetchCallOuts, insertCallOut, supabase, supabaseConfigured, updateCallOutDb } from '../lib/supabase';
 import { parseShiftsCsv } from '../lib/shiftCsv';
+import { useAuth } from './AuthContext';
+import { useWorkspace } from './WorkspaceContext';
 
 const AppContext = createContext(null);
 
-const BACKEND_URL = 'http://localhost:3001';
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 
 // Map Supabase row (snake_case columns) into the shape the schedule UI expects.
 function toUiShift(row) {
@@ -25,7 +27,7 @@ function toUiShift(row) {
 
 let actionIdCounter = 1000;
 
-function generatePlan(employee, text, keywords) {
+function generatePlan(employee, _text, _keywords) {
   const role = employee?.role || 'Staff';
   const name = employee?.name || 'Unknown';
 
@@ -40,16 +42,13 @@ function generatePlan(employee, text, keywords) {
       employeeId: e.id,
       name: e.name,
       role: e.role,
+      discordUsername: e.discord || null,
       reason: isScheduled
         ? `Already scheduled today — could extend shift (${e.hoursThisWeek} hrs this week)`
         : `Not scheduled today — ${e.hoursThisWeek} hrs this week, available for extra shift`,
       score: Math.max(40, 95 - i * 18 - (isScheduled ? 15 : 0)),
     };
   });
-
-  const callOutType = keywords.some(k => ['sick', 'fever', 'hospital', 'urgent care', 'throwing up'].includes(k))
-    ? 'Illness'
-    : 'Emergency';
 
   const roleLabel = (role === 'Staff' || !employee) ? 'a team member' : `one ${role}`;
   const draftMsgId = Date.now();
@@ -91,22 +90,96 @@ function generatePlan(employee, text, keywords) {
 // ── Provider ──────────────────────────────────────────────────────────────────
 
 export function AppProvider({ children }) {
-  const [callOuts, setCallOuts] = useState(INITIAL_CALL_OUTS);
+  const { session } = useAuth();
+  const { workspace } = useWorkspace();
+  const [callOuts, setCallOuts] = useState([]);
   const [extraTasks, setExtraTasks] = useState([]);
+  const [discordStaff, setDiscordStaff] = useState([]);
   const socketRef = useRef(null);
+  const workspaceIdRef = useRef(null);
+  const callOutsRef = useRef([]);
+  const accessTokenRef = useRef(null);
+
+  useEffect(() => { workspaceIdRef.current = workspace?.id || null; }, [workspace?.id]);
+  useEffect(() => { callOutsRef.current = callOuts; }, [callOuts]);
+  useEffect(() => { accessTokenRef.current = session?.access_token || null; }, [session?.access_token]);
+
+  const authHeaders = useCallback(() => {
+    const token = accessTokenRef.current;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }, []);
+
+  const syncDiscordMembers = useCallback(async (guildId) => {
+    if (!guildId) return [];
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/discord/members/${guildId}`);
+      const data = await res.json();
+      if (!res.ok) return { error: data.error, hint: data.hint };
+      if (data.members) { setDiscordStaff(data.members); return data.members; }
+    } catch (err) {
+      return { error: err.message };
+    }
+    return [];
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCallOuts() {
+      if (!workspace?.id) {
+        setCallOuts([]);
+        return;
+      }
+      if (!supabaseConfigured) {
+        setCallOuts(INITIAL_CALL_OUTS);
+        return;
+      }
+
+      const { data, error } = await fetchCallOuts(workspace.id);
+      if (cancelled) return;
+      if (error) {
+        console.error('Failed to load call-outs:', error.message);
+        setCallOuts(INITIAL_CALL_OUTS);
+        return;
+      }
+      setCallOuts((data || []).map(dbToUiCallOut));
+    }
+
+    loadCallOuts();
+    return () => { cancelled = true; };
+  }, [workspace?.id]);
 
   useEffect(() => {
     const socket = io(BACKEND_URL, { transports: ['websocket', 'polling'] });
     socketRef.current = socket;
 
-    socket.on('call_out_detected', ({ sender, username, text, keywords, time }) => {
+    socket.on('coverage_response', ({ callOutId, accepted, respondent }) => {
+      setCallOuts(prev => prev.map(c => {
+        if (c.id !== callOutId) return c;
+        if (accepted) return { ...c, status: 'covered', coveredBy: respondent };
+        return { ...c, coverageDeclined: true, declinedBy: respondent };
+      }));
+      const fields = accepted
+        ? { status: 'covered', covered_by: respondent }
+        : { coverage_declined: true, declined_by: respondent };
+      updateCallOutDb(callOutId, fields).then(({ error } = {}) => {
+        if (error) console.error('Failed to persist coverage response:', error.message);
+      });
+    });
+
+    socket.on('call_out_detected', ({ sender, username, text, keywords = [], category, time }) => {
       const employee = EMPLOYEES.find(e =>
         e.name.toLowerCase() === sender.toLowerCase() ||
         e.discord?.toLowerCase() === username.toLowerCase()
       ) || null;
 
+      const illnessWords = ['sick', 'fever', 'hospital', 'urgent care', 'throwing up'];
+      const isIllness = keywords.some(k => illnessWords.includes(k)) ||
+        illnessWords.some(w => text.toLowerCase().includes(w));
+
+      const tempId = Date.now();
       const newCase = {
-        id: Date.now(),
+        id: tempId,
         employeeName: employee?.name || sender,
         employeeId: employee?.id || null,
         role: employee?.role || 'Staff',
@@ -115,23 +188,34 @@ export function AppProvider({ children }) {
         detectedAt: time,
         shift: 'Today',
         shiftTime: 'Today',
-        callOutType: keywords.some(k => ['sick', 'fever', 'hospital', 'urgent care', 'throwing up'].includes(k)) ? 'Illness' : 'Emergency',
+        callOutType: isIllness ? 'Illness' : 'Emergency',
         reason: text.slice(0, 80),
         urgency: 'High',
         urgencyReason: 'Live call-out detected via Discord',
-        confidence: 85,
+        confidence: category ? 90 : 85,
         status: 'pending-approval',
         outreachTarget: null,
         plan: generatePlan(employee, text, keywords),
       };
 
-      setCallOuts(prev => {
-        // Don't duplicate if same person already has a pending case
-        const alreadyExists = prev.some(c =>
-          c.employeeName === newCase.employeeName &&
-          ['pending-approval', 'outreach-sent'].includes(c.status)
-        );
-        return alreadyExists ? prev : [newCase, ...prev];
+      // Don't duplicate if same person already has a pending/live case.
+      const alreadyExists = callOutsRef.current.some(c =>
+        c.employeeName === newCase.employeeName &&
+        ['pending-approval', 'outreach-sent'].includes(c.status)
+      );
+      if (alreadyExists) return;
+
+      setCallOuts(prev => [newCase, ...prev]);
+
+      const workspaceId = workspaceIdRef.current;
+      if (!workspaceId || !supabaseConfigured) return;
+
+      insertCallOut(workspaceId, newCase).then(({ data, error }) => {
+        if (error) {
+          console.error('Failed to persist call-out:', error.message);
+          return;
+        }
+        setCallOuts(prev => prev.map(c => c.id === tempId ? dbToUiCallOut(data) : c));
       });
     });
 
@@ -150,12 +234,17 @@ export function AppProvider({ children }) {
       setShiftsError('Supabase not configured — see bibi_hackathon/.env.example');
       return;
     }
+    if (!workspace?.id) {
+      setRemoteShifts(null);
+      return;
+    }
     setShiftsLoading(true);
     setShiftsError(null);
     try {
       const { data, error } = await supabase
         .from('shifts')
         .select('*')
+        .eq('workspace_id', workspace.id)
         .order('day', { ascending: true })
         .order('start_time', { ascending: true });
       if (error) throw error;
@@ -166,7 +255,7 @@ export function AppProvider({ children }) {
     } finally {
       setShiftsLoading(false);
     }
-  }, []);
+  }, [workspace?.id]);
 
   useEffect(() => { refreshShifts(); }, [refreshShifts]);
 
@@ -174,10 +263,16 @@ export function AppProvider({ children }) {
     if (!supabaseConfigured) {
       throw new Error('Supabase not configured — see bibi_hackathon/.env.example');
     }
-    const rows = await parseShiftsCsv(file);
+    if (!workspace?.id) {
+      throw new Error('Workspace is not ready yet.');
+    }
+    const rows = (await parseShiftsCsv(file)).map(row => ({
+      ...row,
+      workspace_id: workspace.id,
+    }));
 
-    // Full replace: wipe then insert. Simplest semantics for an "import".
-    const del = await supabase.from('shifts').delete().neq('id', 0);
+    // Full replace within this workspace only.
+    const del = await supabase.from('shifts').delete().eq('workspace_id', workspace.id);
     if (del.error) throw new Error(`Delete failed: ${del.error.message}`);
 
     const ins = await supabase.from('shifts').insert(rows);
@@ -204,6 +299,9 @@ export function AppProvider({ children }) {
 
   function updateCallOutStatus(id, status) {
     setCallOuts(prev => prev.map(c => c.id === id ? { ...c, status } : c));
+    updateCallOutDb(id, { status }).then(({ error } = {}) => {
+      if (error) console.error('Failed to persist call-out status:', error.message);
+    });
   }
 
   function toggleAction(callOutId, actionId) {
@@ -253,15 +351,26 @@ export function AppProvider({ children }) {
     }));
   }
 
-  async function sendApprovedMessages(callOutId, workspaceId) {
+  async function sendApprovedMessages(callOutId, workspaceId, selectedEmployeeId) {
     const callOut = callOuts.find(c => c.id === callOutId);
     if (!callOut) return;
+    const replacements = callOut.plan?.replacements || [];
+    const askedReplacement = replacements.find(r => r.employeeId === selectedEmployeeId) || replacements[0];
+    const askedUsername = askedReplacement?.discordUsername || null;
+    const outreachTarget = askedReplacement?.name || 'Staff Group';
     await fetch(`${BACKEND_URL}/send-messages`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: callOut.plan.draftMessages, workspaceId }),
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ messages: callOut.plan.draftMessages, workspaceId, callOutId, askedUsername }),
     }).catch(() => {});
-    updateCallOutStatus(callOutId, 'outreach-sent');
+    setCallOuts(prev => prev.map(c =>
+      c.id === callOutId ? { ...c, status: 'outreach-sent', outreachTarget } : c
+    ));
+    const { error } = await updateCallOutDb(callOutId, {
+      status: 'outreach-sent',
+      outreach_target: outreachTarget,
+    });
+    if (error) console.error('Failed to persist approved outreach:', error.message);
   }
 
   const stats = {
@@ -278,6 +387,7 @@ export function AppProvider({ children }) {
       refreshShifts, uploadShiftsCsv,
       updateCallOutStatus, sendApprovedMessages, toggleAction, toggleExtraTask, addExtraTask, removeExtraTask,
       updateDraftMessage, updateTemporaryPlan,
+      discordStaff, syncDiscordMembers,
     }}>
       {children}
     </AppContext.Provider>
