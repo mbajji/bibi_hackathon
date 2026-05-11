@@ -5,7 +5,7 @@ import { io } from 'socket.io-client';
 import { DISCORD_MESSAGES } from '../data/mockData';
 import { useApp } from '../context/AppContext';
 
-const BACKEND_URL = 'http://localhost:3001';
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 
 const ROLE_COLORS = {
   'Emma Wilson': '#14b8a6',
@@ -127,7 +127,7 @@ export default function DiscordMonitor() {
         <div>
           <p className="text-sm font-semibold text-indigo-800">How it works</p>
           <p className="text-sm text-indigo-600 mt-0.5">
-            Add ShiftSaver to your Discord server, then run <span className="font-mono bg-indigo-100 px-1 rounded">/setup</span> in the staff channel. The bot reads every message and auto-creates a recovery case when it detects a call-out — no action needed until the manager reviews it.
+            Add ShiftSaver to your Discord server and link it from the sidebar. The bot reads every message and auto-creates a recovery case when it detects a call-out.
             {!connected && <span className="text-orange-600"> Start the backend to connect a real Discord server.</span>}
           </p>
         </div>
