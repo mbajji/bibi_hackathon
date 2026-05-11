@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
-import { LayoutDashboard, CalendarDays, MessageSquare, ClipboardList, ChevronRight, LogOut } from 'lucide-react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { LayoutDashboard, CalendarDays, MessageSquare, ClipboardList, ChevronRight, LogOut, Link, Unlink } from 'lucide-react';
 import { RESTAURANT_NAME } from '../data/mockData';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
+import { useWorkspace } from '../context/WorkspaceContext';
 
 function formatHeaderDate(d) {
   const datePart = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
@@ -21,6 +22,8 @@ const NAV = [
 export default function Layout({ children }) {
   const { stats } = useApp();
   const { user, signOut } = useAuth();
+  const { discordLink } = useWorkspace();
+  const navigate = useNavigate();
   const location = useLocation();
   const userInitial = (user?.email || 'M').trim().charAt(0).toUpperCase();
   const [now, setNow] = useState(() => new Date());
@@ -90,6 +93,24 @@ export default function Layout({ children }) {
               <span className="text-green-400 font-semibold">{stats.covered}</span>
             </div>
           </div>
+
+          {/* Discord connection status */}
+          <button
+            onClick={() => navigate('/connect-discord')}
+            className={`mt-3 w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-xs font-medium transition-colors ${
+              discordLink
+                ? 'bg-indigo-900/40 text-indigo-300 hover:bg-indigo-900/60'
+                : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-300'
+            }`}
+          >
+            {discordLink ? <Link size={12} /> : <Unlink size={12} />}
+            <span className="truncate flex-1 text-left">
+              {discordLink ? discordLink.guild_name : 'Connect Discord'}
+            </span>
+            {discordLink && (
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0" />
+            )}
+          </button>
         </div>
       </aside>
 

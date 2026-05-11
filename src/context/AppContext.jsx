@@ -51,6 +51,7 @@ function generatePlan(employee, text, keywords) {
     ? 'Illness'
     : 'Emergency';
 
+  const roleLabel = (role === 'Staff' || !employee) ? 'a team member' : `one ${role}`;
   const draftMsgId = Date.now();
   const draftMessages = replacements.length > 0
     ? [{
@@ -62,13 +63,13 @@ function generatePlan(employee, text, keywords) {
         id: draftMsgId + 1,
         to: 'Staff Group',
         type: 'Group',
-        message: `📢 We're short one ${role} today. If anyone can come in or come in early, please reply or DM me. Thanks!`,
+        message: `📢 We're short ${roleLabel} today. If anyone can come in or come in early, please reply or DM me. Thanks!`,
       }]
     : [{
         id: draftMsgId,
         to: 'Staff Group',
         type: 'Group',
-        message: `📢 We're short one ${role} today. If anyone can cover, please reply here or DM me. Thanks!`,
+        message: `📢 We're short ${roleLabel} today. If anyone can cover, please reply here or DM me. Thanks!`,
       }];
 
   const baseId = ++actionIdCounter;
@@ -252,13 +253,13 @@ export function AppProvider({ children }) {
     }));
   }
 
-  async function sendApprovedMessages(callOutId) {
+  async function sendApprovedMessages(callOutId, workspaceId) {
     const callOut = callOuts.find(c => c.id === callOutId);
     if (!callOut) return;
     await fetch(`${BACKEND_URL}/send-messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: callOut.plan.draftMessages }),
+      body: JSON.stringify({ messages: callOut.plan.draftMessages, workspaceId }),
     }).catch(() => {});
     updateCallOutStatus(callOutId, 'outreach-sent');
   }
