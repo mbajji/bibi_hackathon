@@ -1,29 +1,51 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { INITIAL_CALL_OUTS, WEEKLY_SHIFTS } from '../data/mockData';
+import { supabase, supabaseConfigured } from '../lib/supabase';
+import { parseShiftsCsv } from '../lib/shiftCsv';
 
 const AppContext = createContext(null);
+
+// Map Supabase row (snake_case columns) into the shape the schedule UI expects.
+function toUiShift(row) {
+  return {
+    employeeId: row.employee_id,
+    employeeName: row.employee_name,
+    role: row.role,
+    day: row.day,
+    start: row.start_time,
+    end: row.end_time,
+    status: row.status,
+  };
+}
 
 export function AppProvider({ children }) {
   const [callOuts, setCallOuts] = useState(INITIAL_CALL_OUTS);
   const [extraTasks, setExtraTasks] = useState([]);
 
-  // Shifts come from the backend (MongoDB). Until the first fetch finishes
-  // or if the server is offline, we fall back to the static WEEKLY_SHIFTS
-  // so the schedule page is never blank.
+  // Shifts come from Supabase. Until the first fetch finishes — or if Supabase
+  // env vars aren't set — we fall back to WEEKLY_SHIFTS so the schedule page
+  // is never blank.
   const [remoteShifts, setRemoteShifts] = useState(null);
   const [shiftsLoading, setShiftsLoading] = useState(false);
   const [shiftsError, setShiftsError] = useState(null);
 
   const refreshShifts = useCallback(async () => {
+    if (!supabaseConfigured) {
+      setShiftsError('Supabase not configured — see bibi_hackathon/.env.example');
+      return;
+    }
     setShiftsLoading(true);
     setShiftsError(null);
     try {
-      const res = await fetch('/api/shifts');
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
-      const data = await res.json();
-      setRemoteShifts(data.shifts || []);
+      const { data, error } = await supabase
+        .from('shifts')
+        .select('*')
+        .order('day', { ascending: true })
+        .order('start_time', { ascending: true });
+      if (error) throw error;
+      setRemoteShifts((data || []).map(toUiShift));
     } catch (err) {
-      setShiftsError(err.message);
+      setShiftsError(err.message || String(err));
       setRemoteShifts(null);
     } finally {
       setShiftsLoading(false);
@@ -33,16 +55,22 @@ export function AppProvider({ children }) {
   useEffect(() => { refreshShifts(); }, [refreshShifts]);
 
   async function uploadShiftsCsv(file) {
-    const form = new FormData();
-    form.append('file', file);
-    const res = await fetch('/api/shifts/upload', { method: 'POST', body: form });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
+    if (!supabaseConfigured) {
+      throw new Error('Supabase not configured — see bibi_hackathon/.env.example');
+    }
+    const rows = await parseShiftsCsv(file);
+
+    // Full replace: wipe then insert. Simplest semantics for an "import".
+    const del = await supabase.from('shifts').delete().neq('id', 0);
+    if (del.error) throw new Error(`Delete failed: ${del.error.message}`);
+
+    const ins = await supabase.from('shifts').insert(rows);
+    if (ins.error) throw new Error(`Insert failed: ${ins.error.message}`);
+
     await refreshShifts();
-    return data;
+    return { inserted: rows.length };
   }
 
-  // Group flat shift list by day-of-week, falling back to the seed when empty.
   const shiftsByDay = useMemo(() => {
     if (!remoteShifts || remoteShifts.length === 0) return WEEKLY_SHIFTS;
     const grouped = { Mon: [], Tue: [], Wed: [], Thu: [], Fri: [], Sat: [], Sun: [] };
