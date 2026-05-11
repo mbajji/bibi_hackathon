@@ -1,7 +1,14 @@
+import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { LayoutDashboard, CalendarDays, MessageSquare, ClipboardList, ChevronRight } from 'lucide-react';
 import { RESTAURANT_NAME } from '../data/mockData';
 import { useApp } from '../context/AppContext';
+
+function formatHeaderDate(d) {
+  const datePart = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  const timePart = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return `${datePart} · ${timePart}`;
+}
 
 const NAV = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -13,6 +20,11 @@ const NAV = [
 export default function Layout({ children }) {
   const { stats } = useApp();
   const location = useLocation();
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   const pageTitle = () => {
     if (location.pathname === '/') return 'Call-Out Dashboard';
@@ -87,7 +99,7 @@ export default function Layout({ children }) {
             <span>{pageTitle()}</span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-500">Sat, May 10 · 9:31 AM</span>
+            <span className="text-sm text-gray-500">{formatHeaderDate(now)}</span>
             <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 text-sm font-bold">M</div>
           </div>
         </header>

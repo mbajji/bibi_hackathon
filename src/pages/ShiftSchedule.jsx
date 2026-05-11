@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
-import { WEEKLY_SHIFTS, WEEK_DAYS, WEEK_DATES, TODAY_DAY_INDEX } from '../data/mockData';
+import { useState, useMemo, useRef } from 'react';
+import { ChevronLeft, ChevronRight, AlertTriangle, Upload, Loader2, CheckCircle2 } from 'lucide-react';
+import { WEEK_DAYS, WEEK_DATES, TODAY_DAY_INDEX, CURRENT_YEAR, TODAY_DAY_KEY } from '../data/mockData';
 import { useApp } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -33,14 +33,14 @@ const HOUR_MARKS = Array.from({ length: TOTAL_HOURS + 1 }, (_, i) => TIMELINE_ST
 export default function StaffSchedule() {
   const [view, setView] = useState('day');
   const [selectedDay, setSelectedDay] = useState(TODAY_DAY_INDEX);
-  const { callOuts } = useApp();
+  const { callOuts, shiftsByDay, hasRemoteShifts, shiftsLoading } = useApp();
   const navigate = useNavigate();
 
-  // For Saturday, apply live call-out statuses from AppContext
+  // For today, apply live call-out statuses from AppContext
   const shifts = useMemo(() => {
     const dayKey = WEEK_DAYS[selectedDay];
-    const raw = WEEKLY_SHIFTS[dayKey] || [];
-    if (dayKey !== 'Sat') return raw;
+    const raw = shiftsByDay[dayKey] || [];
+    if (dayKey !== TODAY_DAY_KEY) return raw;
     return raw.map(shift => {
       const co = callOuts.find(c => c.employeeId === shift.employeeId);
       if (!co) return shift;
@@ -48,34 +48,40 @@ export default function StaffSchedule() {
       if (['pending-approval', 'outreach-sent'].includes(co.status)) return { ...shift, status: 'called-out', callOutId: co.id };
       return shift;
     });
-  }, [selectedDay, callOuts]);
+  }, [selectedDay, callOuts, shiftsByDay]);
 
   function prevDay() { setSelectedDay(d => Math.max(0, d - 1)); }
   function nextDay() { setSelectedDay(d => Math.min(6, d + 1)); }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Staff Schedule</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            {WEEK_DATES[selectedDay]}, 2025
+            {WEEK_DATES[selectedDay]}, {CURRENT_YEAR}
             {selectedDay === TODAY_DAY_INDEX && <span className="ml-2 text-orange-500 font-medium">· Today</span>}
+            {!hasRemoteShifts && !shiftsLoading && (
+              <span className="ml-2 text-gray-400">· showing sample data</span>
+            )}
           </p>
         </div>
-        <div className="flex bg-gray-100 rounded-lg p-0.5 gap-0.5">
-          <button
-            onClick={() => setView('day')}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${view === 'day' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
-          >
-            Day
-          </button>
-          <button
-            onClick={() => setView('week')}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${view === 'week' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
-          >
-            Week
-          </button>
+        <div className="flex items-center gap-2">
+          <CsvUploadButton />
+          <div className="flex bg-gray-100 rounded-lg p-0.5 gap-0.5">
+            <button
+              onClick={() => setView('day')}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${view === 'day' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Day
+            </button>
+            <button
+              onClick={() => setView('week')}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${view === 'week' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Week
+            </button>
+          </div>
         </div>
       </div>
 
@@ -92,8 +98,8 @@ export default function StaffSchedule() {
           {WEEK_DAYS.map((day, i) => {
             const isToday = i === TODAY_DAY_INDEX;
             const isSelected = i === selectedDay;
-            const dayShifts = WEEKLY_SHIFTS[day] || [];
-            const hasCallOut = day === 'Sat' && callOuts.some(c => !['covered', 'unresolved'].includes(c.status));
+            const dayShifts = shiftsByDay[day] || [];
+            const hasCallOut = day === TODAY_DAY_KEY && callOuts.some(c => !['covered', 'unresolved'].includes(c.status));
             return (
               <button
                 key={day}
@@ -129,8 +135,60 @@ export default function StaffSchedule() {
 
       {view === 'day'
         ? <DayTimeline shifts={shifts} navigate={navigate} />
-        : <WeekView selectedDay={selectedDay} onSelectDay={i => { setSelectedDay(i); setView('day'); }} callOuts={callOuts} />
+        : <WeekView selectedDay={selectedDay} onSelectDay={i => { setSelectedDay(i); setView('day'); }} callOuts={callOuts} shiftsByDay={shiftsByDay} />
       }
+    </div>
+  );
+}
+
+function CsvUploadButton() {
+  const { uploadShiftsCsv } = useApp();
+  const inputRef = useRef(null);
+  const [state, setState] = useState({ status: 'idle', message: '' });
+
+  async function handleFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-uploading the same file
+    if (!file) return;
+
+    setState({ status: 'uploading', message: '' });
+    try {
+      const result = await uploadShiftsCsv(file);
+      setState({ status: 'success', message: `Imported ${result.inserted} shifts` });
+      setTimeout(() => setState({ status: 'idle', message: '' }), 3000);
+    } catch (err) {
+      setState({ status: 'error', message: err.message });
+    }
+  }
+
+  const busy = state.status === 'uploading';
+  return (
+    <div className="flex items-center gap-2">
+      {state.status === 'success' && (
+        <span className="flex items-center gap-1 text-xs text-green-600">
+          <CheckCircle2 size={13} /> {state.message}
+        </span>
+      )}
+      {state.status === 'error' && (
+        <span className="text-xs text-red-600 max-w-[260px] truncate" title={state.message}>
+          {state.message}
+        </span>
+      )}
+      <button
+        onClick={() => inputRef.current?.click()}
+        disabled={busy}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-orange-500 hover:bg-orange-600 disabled:opacity-60 disabled:cursor-not-allowed text-white transition-colors"
+      >
+        {busy ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+        {busy ? 'Uploading…' : 'Import CSV'}
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".csv,text/csv"
+        onChange={handleFile}
+        className="hidden"
+      />
     </div>
   );
 }
@@ -253,15 +311,15 @@ function DayTimeline({ shifts, navigate }) {
   );
 }
 
-function WeekView({ selectedDay, onSelectDay, callOuts }) {
+function WeekView({ selectedDay, onSelectDay, callOuts, shiftsByDay }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       <div className="grid grid-cols-7 divide-x divide-gray-100">
         {WEEK_DAYS.map((day, i) => {
           const isToday = i === TODAY_DAY_INDEX;
           const isSelected = i === selectedDay;
-          const dayShifts = WEEKLY_SHIFTS[day] || [];
-          const hasCallOut = day === 'Sat' && callOuts.some(c => !['covered', 'unresolved'].includes(c.status));
+          const dayShifts = shiftsByDay[day] || [];
+          const hasCallOut = day === TODAY_DAY_KEY && callOuts.some(c => !['covered', 'unresolved'].includes(c.status));
 
           return (
             <button
@@ -281,7 +339,7 @@ function WeekView({ selectedDay, onSelectDay, callOuts }) {
               <div className="space-y-1">
                 {dayShifts.map(s => {
                   const colors = ROLE_COLORS[s.role] || ROLE_COLORS.Busser;
-                  const isCO = day === 'Sat' && callOuts.some(c => c.employeeId === s.employeeId && !['covered', 'unresolved'].includes(c.status));
+                  const isCO = day === TODAY_DAY_KEY && callOuts.some(c => c.employeeId === s.employeeId && !['covered', 'unresolved'].includes(c.status));
                   return (
                     <div key={s.employeeId} className="flex items-center gap-1.5">
                       <div

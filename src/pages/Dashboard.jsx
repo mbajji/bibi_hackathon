@@ -3,8 +3,14 @@ import { AlertTriangle, Send, CheckCircle, ArrowRight, MessageCircle, Clock } fr
 import { useApp } from '../context/AppContext';
 import { UrgencyBadge } from '../components/Badges';
 
+const TODAY_LABEL = new Date().toLocaleDateString('en-US', {
+  weekday: 'long',
+  month: 'long',
+  day: 'numeric',
+});
+
 export default function Dashboard() {
-  const { callOuts, stats } = useApp();
+  const { callOuts } = useApp();
   const navigate = useNavigate();
 
   const needsApproval = callOuts.filter(c => c.status === 'pending-approval');
@@ -15,7 +21,7 @@ export default function Dashboard() {
     <div className="space-y-8 max-w-2xl">
       <div>
         <h1 className="text-xl font-bold text-gray-900">Active Cases</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Saturday, May 10 · Lunch & dinner service</p>
+        <p className="text-sm text-gray-500 mt-0.5">{TODAY_LABEL} · Lunch & dinner service</p>
       </div>
 
       {/* Needs approval */}

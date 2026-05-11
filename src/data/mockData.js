@@ -83,8 +83,31 @@ export const WEEKLY_SHIFTS = {
 };
 
 export const WEEK_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-export const WEEK_DATES = ['May 5', 'May 6', 'May 7', 'May 8', 'May 9', 'May 10', 'May 11'];
-export const TODAY_DAY_INDEX = 5; // Saturday
+
+// Computed at module load: the Mon–Sun calendar dates that contain today,
+// and which index in WEEK_DAYS today maps to. Always reflects the real date
+// so the schedule header doesn't drift over time.
+function computeCurrentWeek() {
+  const today = new Date();
+  const jsDay = today.getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
+  const todayIndex = jsDay === 0 ? 6 : jsDay - 1; // shift to Mon-first
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - todayIndex);
+
+  const dates = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    dates.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+  }
+  return { dates, todayIndex, year: today.getFullYear() };
+}
+
+const { dates: _DATES, todayIndex: _TODAY_INDEX, year: _YEAR } = computeCurrentWeek();
+export const WEEK_DATES = _DATES;
+export const TODAY_DAY_INDEX = _TODAY_INDEX;
+export const CURRENT_YEAR = _YEAR;
+export const TODAY_DAY_KEY = WEEK_DAYS[_TODAY_INDEX];
 
 export const INITIAL_CALL_OUTS = [
   {
