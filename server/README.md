@@ -1,87 +1,47 @@
 # ShiftSaver Server
 
-Express + MongoDB backend for the staff schedule. Reads/writes shifts from a Mongo collection; accepts CSV uploads from the frontend.
+Express + Socket.IO backend that:
 
-## One-time setup
+- Optionally connects to a Telegram bot and listens for staff messages.
+- Detects call-out keywords (sick, can't make it, emergency, …) in incoming messages.
+- Broadcasts `new_message` and `call_out_detected` events over Socket.IO to the React frontend.
 
-### 1. Create a free MongoDB Atlas cluster
+Messages are kept **in memory** for the lifetime of the process — there is no database. Shift data is stored in Supabase and accessed directly from the frontend.
 
-1. Go to https://www.mongodb.com/cloud/atlas/register and sign up (no credit card).
-2. Create a new project, then **Build a Database** → choose the free **M0** tier.
-3. Pick any cloud provider / region close to you. Click **Create**.
-4. **Database Access** (left sidebar) → **Add New Database User**. Username + password — write these down.
-5. **Network Access** (left sidebar) → **Add IP Address** → **Allow access from anywhere** (`0.0.0.0/0`). Fine for development.
-6. Back on **Database** → **Connect** → **Drivers** → copy the connection string. It looks like:
-   ```
-   mongodb+srv://USER:<password>@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority
-   ```
-7. Replace `<password>` with the password from step 4, and add a database name before the `?`:
-   ```
-   mongodb+srv://USER:PASS@cluster0.xxxxx.mongodb.net/shiftsaver?retryWrites=true&w=majority
-   ```
+## Setup
 
-### 2. Configure this server
-
-```
-cp .env.example .env
-```
-
-Open `.env` and paste your connection string into `MONGODB_URI=`.
-
-### 3. Install + run
 ```
 npm install
+cp .env.example .env   # optional: only needed if you want a real Telegram bot
 npm start
 ```
 
 You should see:
 ```
-Connected to MongoDB
-Server listening on http://localhost:3001
+🚀 ShiftSaver backend running on http://localhost:3001
 ```
 
-## Running the frontend with the backend
-
-From the project root (`bibHacks/`):
-
-Terminal 1 — backend:
-```
-cd bibi_hackathon/server
-npm start
-```
-
-Terminal 2 — frontend:
-```
-cd bibi_hackathon
-npm start
-```
-
-The React dev server proxies `/api/*` to `http://localhost:3001` (configured in `bibi_hackathon/package.json`), so no CORS setup is needed during development.
+If `TELEGRAM_BOT_TOKEN` is set in `.env`, the bot connects via polling. Without it, the server still runs in mock-only mode and you can POST fake messages from the UI or curl.
 
 ## Endpoints
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/api/health` | Liveness check |
-| `GET` | `/api/shifts` | List all shifts. Add `?day=Sat` to filter. |
-| `POST` | `/api/shifts/upload` | Multipart form upload of a CSV file under field name `file`. Replaces all shifts. |
-| `DELETE` | `/api/shifts` | Wipe all shifts. |
+| `GET`  | `/health`        | Liveness check — returns `{ ok, botConnected }` |
+| `GET`  | `/messages`      | All messages logged this session |
+| `POST` | `/mock-message`  | Inject a fake chat message — body: `{ sender, text }` |
 
-## CSV format
+## Socket.IO events emitted
 
-Header row required. Columns:
+- `new_message` — every chat message (user or bot reply).
+- `call_out_detected` — fired when a message matches a call-out keyword. The frontend uses this to open a recovery case.
 
-```csv
-employeeName,role,day,start,end
-Maria Santos,Server,Mon,11:00,16:00
-```
+## Telegram bot setup (optional)
 
-- `day`: one of `Mon Tue Wed Thu Fri Sat Sun` (case-sensitive).
-- `start` / `end`: 24-hour `HH:MM`.
-- `role`: free text; known roles (`Server`, `Line Cook`, `Sous Chef`, `Bartender`, `Host`, `Busser`) get color-coding on the schedule.
-
-A working sample lives at `../../sample_schedule.csv` (project root). Click **Import CSV** on the Staff Schedule page and pick that file to see it work end-to-end.
-
-## How employee IDs work
-
-Names in the CSV are looked up against a seed list (`seedEmployees.js`) that mirrors `../src/data/mockData.js`. Known names reuse their stable `employeeId` so call-out detection keeps matching the right person. New names get a fresh ID allocated.
+1. Talk to `@BotFather` on Telegram, run `/newbot`, follow the prompts, copy the token.
+2. Put the token in `.env`:
+   ```
+   TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
+   ```
+3. Restart `npm start`. You should see `✅ Telegram bot connected (polling)`.
+4. Add the bot to a group chat and send messages. Call-outs will appear in the React app.
